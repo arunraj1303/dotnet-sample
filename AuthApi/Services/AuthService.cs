@@ -29,24 +29,58 @@ namespace AuthApi.Services
         {
             try
             {
-                _logger.LogInformation("Login attempt for username: {Username}", dto.Username);
+                _logger.LogInformation("=== LOGIN ATTEMPT START ===");
+                _logger.LogInformation("Username from request: {Username}", dto.Username);
+                _logger.LogInformation("Password from request: {Password}", dto.Password);
 
-                // Check user from v_users table
+                // Check user from users table
+                _logger.LogInformation("Querying database for user...");
                 var user = await _context.Users
                     .FirstOrDefaultAsync(u => u.Username == dto.Username);
 
                 if (user == null)
                 {
-                    _logger.LogWarning("User not found: {Username}", dto.Username);
+                    _logger.LogWarning("❌ User NOT found in database: {Username}", dto.Username);
                     return (false, "Invalid username or password", null);
                 }
 
-                // Verify BCrypt hashed password
-                bool isPasswordValid = BCrypt.Net.BCrypt.Verify(dto.Password, user.Password);
+                _logger.LogInformation("✅ User found in database!");
+                _logger.LogInformation("User ID: {Id}", user.Id);
+                _logger.LogInformation("Username from DB: {Username}", user.Username);
+                _logger.LogInformation("Email from DB: {Email}", user.Email ?? "NULL");
+                _logger.LogInformation("Full password hash from DB: {Hash}", user.Password);
+
+                // Verify BCrypt hashed password - handle $2b$ compatibility
+                string passwordHash = user.Password ?? "";
+                _logger.LogInformation("Original hash prefix: {Prefix}", passwordHash.Substring(0, Math.Min(4, passwordHash.Length)));
+                
+                if (passwordHash.StartsWith("$2b$"))
+                {
+                    passwordHash = "$2a$" + passwordHash.Substring(4);
+                    _logger.LogInformation("🔄 Converted $2b$ to $2a$ for compatibility");
+                    _logger.LogInformation("Modified hash: {Hash}", passwordHash);
+                }
+
+                bool isPasswordValid = false;
+                try
+                {
+                    _logger.LogInformation("🔐 Attempting BCrypt.Verify...");
+                    _logger.LogInformation("Input password: '{Password}'", dto.Password);
+                    _logger.LogInformation("Against hash: '{Hash}'", passwordHash);
+                    
+                    isPasswordValid = BCrypt.Net.BCrypt.Verify(dto.Password, passwordHash);
+                    
+                    _logger.LogInformation("BCrypt verify result: {Result}", isPasswordValid ? "✅ SUCCESS" : "❌ FAILED");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "💥 BCrypt verification threw exception");
+                }
                 
                 if (!isPasswordValid)
                 {
-                    _logger.LogWarning("Invalid password for user: {Username}", dto.Username);
+                    _logger.LogWarning("❌ Password verification FAILED for user: {Username}", dto.Username);
+                    _logger.LogInformation("=== LOGIN ATTEMPT END (FAILED) ===");
                     return (false, "Invalid username or password", null);
                 }
 

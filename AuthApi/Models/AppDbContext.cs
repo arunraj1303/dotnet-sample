@@ -21,7 +21,7 @@ namespace AuthApi.Models
             // Configure User entity
             modelBuilder.Entity<User>(entity =>
             {
-                entity.ToTable("v_users");
+                entity.ToTable("users");
                 entity.HasKey(e => e.Id);
             });
         }

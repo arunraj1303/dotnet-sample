@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AuthApi.Models
 {
-    [Table("v_users")]
+    [Table("users")]
     public class User
     {
         [Key]
