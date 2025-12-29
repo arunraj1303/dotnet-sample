@@ -113,6 +113,7 @@ builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 // Register Services
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ICompanyService, CompanyService>();
 
 builder.Services.AddEndpointsApiExplorer();
 

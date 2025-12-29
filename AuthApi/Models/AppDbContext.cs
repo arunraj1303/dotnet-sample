@@ -13,6 +13,7 @@ namespace AuthApi.Models
         }
 
         public new DbSet<User> Users { get; set; }
+        public DbSet<Company> Companies { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -22,6 +23,13 @@ namespace AuthApi.Models
             modelBuilder.Entity<User>(entity =>
             {
                 entity.ToTable("users");
+                entity.HasKey(e => e.Id);
+            });
+
+            // Configure Company entity
+            modelBuilder.Entity<Company>(entity =>
+            {
+                entity.ToTable("companies");
                 entity.HasKey(e => e.Id);
             });
         }
