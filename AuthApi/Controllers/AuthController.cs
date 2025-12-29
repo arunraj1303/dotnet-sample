@@ -1,76 +1,99 @@
-﻿using AuthApi.DTO;
-using Microsoft.AspNetCore.Identity;
+﻿using AuthApi.Common;
+using AuthApi.DTO;
+using AuthApi.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
-[ApiController]
-[Route("api/[controller]")]
-public class AccountController : ControllerBase
+namespace AuthApi.Controllers
 {
-    private readonly UserManager<IdentityUser> _userManager;
-
-    public AccountController(UserManager<IdentityUser> userManager)
+    [ApiController]
+    [Route("api/[controller]")]
+    public class AccountController : ControllerBase
     {
-        _userManager = userManager;
-    }
+        private readonly IAuthService _authService;
+        private readonly ILogger<AccountController> _logger;
 
-    [HttpPost("register")]
-    public async Task<IActionResult> Register(AuthApi.DTO.RegisterDTO dto)
-    {
-        var existingUser = await _userManager.FindByNameAsync(dto.Username);
-        if (existingUser != null)
-            return BadRequest("User already exists");
-
-        var user = new IdentityUser
+        public AccountController(IAuthService authService, ILogger<AccountController> logger)
         {
-            UserName = dto.Username
-        };
-
-        var result = await _userManager.CreateAsync(user, dto.password);
-
-        if (!result.Succeeded)
-            return BadRequest(result.Errors);
-
-        return Ok("User registered successfully");
-
-    }
-
-    [HttpGet("{username}")]
-    public async Task<IActionResult> GetUser(string username)
-    {
-        var user = await _userManager.FindByNameAsync(username);
-
-        if (user == null)
-            return NotFound("User not found");
-
-        return Ok(new
-        {
-            
-            user.UserName
-        });
-    }
-    [HttpPut]
-    public async Task<IActionResult> UpdateUser(UpdateUserDTO dto)
-    {
-        var user = await _userManager.FindByNameAsync(dto.Username);
-
-        if (user == null)
-            return NotFound("User not found");
-
-        // Update Password
-        if (!string.IsNullOrEmpty(dto.NewPassword))
-        {
-            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-            var passwordResult = await _userManager.ResetPasswordAsync(
-                user,
-                token,
-                dto.NewPassword
-            );
-
-            if (!passwordResult.Succeeded)
-                return BadRequest(passwordResult.Errors);
+            _authService = authService;
+            _logger = logger;
         }
 
-        return Ok("User updated successfully");
-    }
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginDTO dto)
+        {
+            _logger.LogInformation("Login request received for username: {Username}", dto.Username);
 
+            var (success, message, token) = await _authService.LoginAsync(dto);
+
+            if (!success)
+            {
+                _logger.LogWarning("Login failed for username: {Username}", dto.Username);
+                return Unauthorized(ApiResponse<object>.ErrorResponse(message));
+            }
+
+            var responseData = new
+            {
+                Token = token,
+                Username = dto.Username
+            };
+
+            _logger.LogInformation("User logged in successfully: {Username}", dto.Username);
+            return Ok(ApiResponse<object>.SuccessResponse(responseData, message));
+        }
+
+        [Authorize]
+        [HttpGet("profile")]
+        public async Task<IActionResult> GetProfile()
+        {
+            try
+            {
+                // Get username from JWT token claims
+                var username = User.FindFirst(ClaimTypes.Name)?.Value;
+                var userId = User.FindFirst("userId")?.Value;
+
+                if (string.IsNullOrEmpty(username))
+                {
+                    _logger.LogWarning("Unable to extract username from token");
+                    return Unauthorized(ApiResponse<object>.ErrorResponse("Invalid token"));
+                }
+
+                _logger.LogInformation("Profile request for user: {Username}", username);
+
+                var (success, message, userData) = await _authService.GetUserAsync(username);
+
+                if (!success)
+                {
+                    _logger.LogWarning("User not found: {Username}", username);
+                    return NotFound(ApiResponse<object>.ErrorResponse(message));
+                }
+
+                _logger.LogInformation("Profile retrieved successfully for user: {Username}", username);
+                return Ok(ApiResponse<object>.SuccessResponse(userData, "Profile retrieved successfully"));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving user profile");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("Internal server error"));
+            }
+        }
+
+        [HttpGet("test")]
+        public IActionResult Test()
+        {
+            _logger.LogInformation("Test API called successfully");
+
+            var testData = new
+            {
+                Status = "API is working!",
+                Environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"),
+                DatabaseHost = Environment.GetEnvironmentVariable("DB_HOST"),
+                DatabaseName = Environment.GetEnvironmentVariable("DB_NAME"),
+                Timestamp = DateTime.UtcNow
+            };
+
+            return Ok(ApiResponse<object>.SuccessResponse(testData, "Test API executed successfully"));
+        }
+    }
 }
